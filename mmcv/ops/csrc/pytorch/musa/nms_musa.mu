@@ -20,10 +20,11 @@ Tensor NMSMUSAKernelLauncher(Tensor boxes, Tensor scores, float iou_threshold,
   dim3 blocks(col_blocks_alloc, col_blocks_alloc);
   dim3 threads(threadsPerBlock);
   musaStream_t stream = c10::musa::getCurrentMUSAStream();
+  printf("LMS: running before nms_musa");
   nms_musa<<<blocks, threads, 0, stream>>>(
       boxes_num, iou_threshold, offset, boxes_sorted.data_ptr<float>(),
       (unsigned long long*)mask.data_ptr<int64_t>());
-
+  printf("LMS: running after nms_musa");
   // Filter the boxes which should be kept.
   at::Tensor keep_t = at::zeros(
       {boxes_num}, boxes.options().dtype(at::kBool).device(::at::musa::kMUSA));

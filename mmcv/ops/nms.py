@@ -24,14 +24,36 @@ class NMSop(torch.autograd.Function):
             valid_inds = torch.nonzero(
                 valid_mask, as_tuple=False).squeeze(dim=1)
 
-        inds = ext_module.nms(
-            bboxes, scores, iou_threshold=float(iou_threshold), offset=offset)
+        import os
+        has_local_rank = "LOCAL_RANK" in os.environ
+        if has_local_rank:
+            local_rank = int(os.environ["LOCAL_RANK"])
+            bboxes_same_device = local_rank == bboxes.device.index
+            scores_same_device = local_rank == scores.device.index
+            info = f"LMS BBOXES same device: {bboxes_same_device}, Scores same device: {scores_same_device}"
+            assert (bboxes_same_device and scores_same_device), info
+
+        use_cpu = False
+        if not use_cpu:
+            inds = ext_module.nms(bboxes, scores, iou_threshold=float(
+                iou_threshold), offset=offset)
+        else:
+            cpu_bboxes = bboxes.cpu()
+            cpu_scores = scores.cpu()
+
+            inds = ext_module.nms(
+                cpu_bboxes, cpu_scores, iou_threshold=float(iou_threshold), offset=offset)
 
         if max_num > 0:
             inds = inds[:max_num]
         if is_filtering_by_score:
+            if use_cpu:
+                valid_inds = valid_inds.cpu()
             inds = valid_inds[inds]
-        return inds
+        if use_cpu:
+            return inds.musa()
+        else:
+            return inds
 
 
 class SoftNMSop(torch.autograd.Function):
